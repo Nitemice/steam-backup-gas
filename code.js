@@ -26,9 +26,18 @@ function backupPlaytime()
         throw "Failed to fetch valid Steam play times page.";
     }
 
+    // Remove some fields we don't care about
+    var outputData = JSON.parse(playtimeData[1]);
+
+    outputData = outputData.map(element =>
+    {
+        delete element.availStatLinks;
+        return element
+    });
+
     // Save as a json file in the indicated Google Drive folder
     common.updateOrCreateFile(config.backupDir, "playtime.json",
-        common.prettyPrintJsonStr(playtimeData[1]));
+        JSON.stringify(outputData, null, 4));
 }
 
 function main()
