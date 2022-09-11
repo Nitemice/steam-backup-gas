@@ -1,5 +1,6 @@
-const apiUrl = "http://api.steampowered.com/";
+const apiUrl = "https://api.steampowered.com/";
 const profileUrl = "https://steamcommunity.com/id/";
+const storeUrl = "https://store.steampowered.com/api/";
 
 ///////////////////////////////////////////////////////////
 
@@ -96,6 +97,79 @@ function backupWishlist()
 
     // Save as a json file in the indicated Google Drive folder
     common.updateOrCreateFile(config.backupDir, "wishlist.json",
+        JSON.stringify(outputData, null, 4));
+}
+
+function backupGames()
+{
+    var userId = getUserId();
+    const parameters = "key=" + config.apiKey + "&steamid=" + userId;
+    const ownedGamesUrl = apiUrl + "IPlayerService/GetOwnedGames/v0001/?format=json&" +
+        parameters;
+    const appInfoUrl = storeUrl + "/appdetails/?appids=";
+    const achievementUrl = apiUrl + "ISteamUserStats/GetPlayerAchievements/v1/?" +
+        parameters + "&appid=";
+
+    // Retrieve list of all owned games, with playtimes
+    var data = getData(ownedGamesUrl);
+    data = JSON.parse(data);
+
+    // Convert returned data to map for later use
+    var appIds = data.response.games.map(x => x.appid);
+    var ownedGames = new Map(data.response.games.map(x => [x.appid, x]));
+
+    var games = new Map();
+    // Retrieve data for all games
+    appIds.forEach(appId =>
+    {
+        // Retrieve achievements for this game
+        var achievementData = getData(achievementUrl + appId);
+        achievementData = JSON.parse(achievementData);
+        if (achievementData.playerstats.success)
+        {
+            achievementData =
+            {
+                "achievements": achievementData.playerstats.achievements
+            };
+        }
+        else
+        {
+            achievementData = {};
+        }
+
+        // Retrieve basic info about this game
+        var gameInfo = getData(appInfoUrl + appId);
+        gameInfo = JSON.parse(gameInfo);
+        if 
+        //gameInfo.success && 
+        (gameInfo[appId].success)
+        {
+            gameInfo =
+            {
+                "name": gameInfo[appId].data.name,
+                "description": gameInfo[appId].data.short_description,
+            };
+        }
+        else
+        {
+            gameInfo = {};
+        }
+
+        // Stitch together previously found data
+        var gameData = {
+            ...gameInfo,
+            ...ownedGames[appId],
+            ...achievementData
+        }
+
+        // Save data to file
+        Logger.log(gameData);
+        games.set(appId, gameData);
+    });
+
+    // Save as a json file in the indicated Google Drive folder
+    var outputData = Object.fromEntries(games.entries());
+    common.updateOrCreateFile(config.backupDir, "gamedata.json",
         JSON.stringify(outputData, null, 4));
 }
 
