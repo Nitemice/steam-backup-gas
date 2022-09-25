@@ -1,6 +1,5 @@
 const apiUrl = "https://api.steampowered.com/";
-const profileUrl = "https://steamcommunity.com/id/";
-const storeUrl = "https://store.steampowered.com/api/";
+const storeUrl = "https://store.steampowered.com/";
 
 ///////////////////////////////////////////////////////////
 
@@ -38,38 +37,11 @@ function backupProfile()
         JSON.stringify(outputData.response, null, 4));
 }
 
-function backupPlaytime()
-{
-    // Retrieve page w/ playtimes
-    const playtimeUrl = profileUrl + config.username + "/games/?tab=all&sort=name";
-    var playtimePage = getData(playtimeUrl);
-
-    // Parse page for game data
-    var playtimeData = playtimePage.match(/var rgGames = (.*);/);
-    if (playtimeData.length < 2)
-    {
-        throw "Failed to fetch valid Steam play times page.";
-    }
-
-    // Remove some fields we don't care about
-    var outputData = JSON.parse(playtimeData[1]);
-
-    outputData = outputData.map(element =>
-    {
-        delete element.availStatLinks;
-        return element
-    });
-
-    // Save as a json file in the indicated Google Drive folder
-    common.updateOrCreateFile(config.backupDir, "playtime.json",
-        JSON.stringify(outputData, null, 4));
-}
-
 function backupWishlist()
 {
     // Retrieve wishlist data
     var userId = getUserId();
-    const wishlistUrl = "https://store.steampowered.com/wishlist/profiles/" +
+    const wishlistUrl = storeUrl + "/wishlist/profiles/" +
         userId + "/wishlistdata/?p=";
 
     // Retrieve pages until no data returned
@@ -105,9 +77,14 @@ function backupGames()
     const parameters = "key=" + config.apiKey + "&steamid=" + userId;
     const ownedGamesUrl = apiUrl + "IPlayerService/GetOwnedGames/v0001/?format=json&" +
         parameters;
-    const appInfoUrl = storeUrl + "/appdetails/?appids=";
+    const appInfoUrl = storeUrl + "api/appdetails/?appids=";
     const achievementUrl = apiUrl + "ISteamUserStats/GetPlayerAchievements/v1/?" +
         parameters + "&appid=";
+    const gameNamesUrl = apiUrl + "ISteamApps/GetAppList/v2/";
+
+    // Retrieve drive folder to save game data in.
+    var folder = common.findOrCreateFolder(config.backupDir, "games");
+    var folderId = folder.getId();
 
     // Retrieve list of all owned games, with playtimes
     var data = getData(ownedGamesUrl);
@@ -117,9 +94,10 @@ function backupGames()
     var appIds = data.response.games.map(x => x.appid);
     var playtimeData = new Map(data.response.games.map(x => [x.appid, x]));
 
-    // Retrieve drive folder to save game data in.
-    var folder = common.findOrCreateFolder(config.backupDir, "games");
-    var folderId = folder.getId();
+    // Retrieve names of all games
+    data = getData(gameNamesUrl);
+    data = JSON.parse(data);
+    var gameNames = new Map(data.applist.apps.map(x => [x.appid, x]));
 
     // Retrieve data for all games
     appIds.forEach(appId =>
@@ -137,25 +115,25 @@ function backupGames()
             };
         }
 
-        // Retrieve basic info about this game
-        var gameData = getData(appInfoUrl + appId);
-        gameData = JSON.parse(gameData);
-
+        // // Retrieve basic info about this game
         var gameInfo = {};
-        if (gameData[appId].success)
+        if (gameNames.has(appId))
         {
+            gameInfo =
+            {
+                "name": gameNames.get(appId).name,
+            };
+        }
+        // Get name from store, if not in all games list
+        else
+        {
+            // Retrieve basic info about this game
+            var gameData = getData(appInfoUrl + appId);
+            gameData = JSON.parse(gameData);
             gameInfo =
             {
                 "name": gameData[appId].data.name,
                 "description": gameData[appId].data.short_description,
-            };
-        }
-        // Get name from achievement info, if we couldn't get it from store
-        else if (achievementData.playerstats.success)
-        {
-            gameInfo =
-            {
-                "name": achievementData.playerstats.gameName
             };
         }
 
@@ -180,12 +158,27 @@ function backupGames()
         common.updateOrCreateFile(folderId, appId + ".json",
             JSON.stringify(outputData, null, 4));
     });
+
+    if (config.removeMissingGames)
+    {
+        // Retrieve files from folder
+        var fileIter = DriveApp.getFolderById(folderId).getFiles();
+        while (fileIter.hasNext())
+        {
+            var file = fileIter.next();
+            // If this file isn't in the list,
+            if (!appIds.includes(file.getName().split('.')[0]))
+            {
+                // Move it to the trash
+                file.setTrashed(true);
+            }
+        }
+    }
 }
 
 function main()
 {
     backupProfile();
-    backupPlaytime();
     backupWishlist();
     backupGames();
 }

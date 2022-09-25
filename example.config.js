@@ -3,4 +3,6 @@ const config = {
     "apiKey": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 
     "backupDir": "xzshxhX8QjQnlNuF_KWzSytboL6EvtSLW",
+
+    "removeMissingGames": false
 };
