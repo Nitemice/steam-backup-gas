@@ -84,7 +84,12 @@ function backupGames()
 
     // Retrieve drive folder to save game data in.
     var folder = common.findOrCreateFolder(config.backupDir, "games");
-    var folderId = folder.getId();
+    var backupFolder = folder.getId();
+
+    // Retrieve a meta list of games for service purposes
+    var metaListFile = common.findOrCreateFile(backupFolder, "meta.list.json", "{}");
+    var metaList = common.grabJson(metaListFile.getId());
+    var killList = common.grabJson(metaListFile.getId());
 
     // Retrieve list of all owned games, with playtimes
     var data = getData(ownedGamesUrl);
@@ -100,8 +105,17 @@ function backupGames()
     var gameNames = new Map(data.applist.apps.map(x => [x.appid, x]));
 
     // Retrieve data for all games
-    appIds.forEach(appId =>
+    for (const appId of appIds)
     {
+        // If the last played date is the same as last time,
+        // then we don't need to update the game's data file
+        if (metaList[appId] &&
+            metaList[appId].last_played == playtimeData.get(appId).rtime_last_played)
+        {
+            delete killList[appId];
+            continue;
+        }
+
         // Retrieve achievements for this game
         var achievementData = getData(achievementUrl + appId);
         achievementData = JSON.parse(achievementData);
@@ -130,11 +144,14 @@ function backupGames()
             // Retrieve basic info about this game
             var gameData = getData(appInfoUrl + appId);
             gameData = JSON.parse(gameData);
-            gameInfo =
+            if (gameData[appId].success)
             {
-                "name": gameData[appId].data.name,
-                "description": gameData[appId].data.short_description,
-            };
+                gameInfo =
+                {
+                    "name": gameData[appId].data.name,
+                    "description": gameData[appId].data.short_description,
+                };
+            }
         }
 
         // Clean up playtime data
@@ -155,23 +172,33 @@ function backupGames()
         }
 
         // Save as a json file in the indicated Google Drive folder
-        common.updateOrCreateFile(folderId, appId + ".json",
+        common.updateOrCreateFile(backupFolder, appId + ".json",
             JSON.stringify(outputData, null, 4));
-    });
 
-    if (config.removeMissingGames)
+        // Update meta list with new info
+        metaList[appId] = {
+            "appId": appId,
+            "last_played": playtimeData.get(appId).rtime_last_played
+        };
+        delete killList[appId];
+
+        // Write the meta list, so we don't lose anything
+        metaListFile.setContent(JSON.stringify(metaList));
+    };
+
+    // Delete game data that no longer exist,
+    // i.e. on the meta list, but not returned by the API
+    if (config.removeMissingGames && Object.keys(killList).length > 0)
     {
-        // Retrieve files from folder
-        var fileIter = DriveApp.getFolderById(folderId).getFiles();
-        while (fileIter.hasNext())
+        for (const [appId, info] of Object.entries(killList))
         {
-            var file = fileIter.next();
-            // If this file isn't in the list,
-            if (!appIds.includes(file.getName().split('.')[0]))
-            {
-                // Move it to the trash
-                file.setTrashed(true);
-            }
+            common.deleteFile(backupFolder, appId + ".json");
+
+            // Remove the now-deleted file from the meta list
+            delete metaList[appId];
+
+            // Write the meta list, so we don't lose anything
+            metaListFile.setContent(JSON.stringify(metaList));
         }
     }
 }
