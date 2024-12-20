@@ -1,5 +1,5 @@
 // Common GAS Functions
-// v2.4.0 - 2022-02-19
+// v2.4.5 - 2024-12-11
 
 var common = {
 
@@ -83,6 +83,22 @@ var common = {
         return file;
     },
 
+    // Append to file content
+    appendOrCreateFile: function(parentDir, filename, newContent)
+    {
+        var file = common.findOrCreateFile(parentDir, filename);
+
+        // Retrieve existing file content
+        var content = file.getBlob().getDataAsString();
+        content += newContent;
+
+        // Set the file contents
+        file.setContent(content);
+        Logger.log("Updated file: " + filename);
+
+        return file;
+    },
+
     // Write blob to file
     updateOrCreateBlobFile: function(parentDir, filename, content)
     {
@@ -118,40 +134,6 @@ var common = {
         return string.replace(pattern, "");
     },
 
-    // Retrieve text from inside XML tags
-    stripXml: function(input)
-    {
-        // Only parse input if it looks like it contains tags
-        if (input.match(/<[^>]*>/))
-        {
-            // Find where the tags start & end
-            var start = input.indexOf('<');
-            var end = input.lastIndexOf('>') + 1;
-
-            // Grab any text before all XML tags
-            var pre = input.slice(0, start);
-            // Grab any text after all XML tags
-            var post = input.slice(end);
-            var inside = "";
-
-            try
-            {
-                // Parse input without any pre or post text
-                var cleanInput = input.slice(start, end);
-
-                var doc = XmlService.parse(cleanInput);
-                inside = doc.getRootElement().getText();
-            }
-            catch (error)
-            {
-                Logger.log(input + " = " + error);
-            }
-
-            return pre + inside + post;
-        }
-        return input;
-    },
-
     // Convert a JSON string to a pretty-print JSON string
     prettyPrintJsonStr: function(input)
     {
@@ -159,7 +141,7 @@ var common = {
     },
 
     // Collate objects at given path, from array of JSON strings
-    collateArrays: function(path, objects)
+    collateArrays: function(path, objects, ignoreNulls = false)
     {
         var outArray = [];
         var chunks = path.split('.');
@@ -171,6 +153,10 @@ var common = {
             for (const chunk of chunks)
             {
                 obj = obj[chunk];
+            }
+
+            if (ignoreNulls) {
+                obj = obj.filter((value) => value != null)
             }
             outArray = outArray.concat(obj);
         }
@@ -187,5 +173,13 @@ var common = {
             output.set(element, defaultCount);
         });
         return output;
+    },
+
+    // Parse UNIX Epoch time, into 
+    epochToIso: function(seconds)
+    {
+        var date = new Date(0);
+        date.setUTCSeconds(seconds);
+        return date.toISOString()
     },
 };

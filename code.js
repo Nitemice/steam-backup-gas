@@ -1,5 +1,5 @@
-const apiUrl = "https://api.steampowered.com/";
-const storeUrl = "https://store.steampowered.com/";
+const apiUrl = "https://api.steampowered.com";
+const storeUrl = "https://store.steampowered.com";
 
 ///////////////////////////////////////////////////////////
 
@@ -15,18 +15,59 @@ function getData(url)
 
 function getUserId()
 {
-    const idUrl = apiUrl + "ISteamUser/ResolveVanityURL/v0001/?key=" + config.apiKey +
+    const idUrl = apiUrl + "/ISteamUser/ResolveVanityURL/v0001/?key=" + config.apiKey +
         "&vanityurl=" + config.username;
     var data = getData(idUrl);
     data = JSON.parse(data);
     return data.response.steamid;
 }
 
+var appInfo;
+function getAppInfo(appId)
+{
+    if (typeof appInfo == 'undefined')
+    {
+        // Retrieve names of all games
+        const gameNamesUrl = apiUrl + "/ISteamApps/GetAppList/v2/";
+        data = getData(gameNamesUrl);
+        data = JSON.parse(data);
+        appInfo = new Map(data.applist.apps.map(x =>
+            [x.appid,
+            {
+                ...x,
+                "description": ""
+            }]
+        ));
+    }
+
+    if (appInfo.has(appId))
+    {
+        return appInfo.get(appId);
+    }
+
+    // Retrieve basic info about this game
+    const appInfoUrl = storeUrl + "/api/appdetails/?appids=";
+    var gameData = getData(appInfoUrl + appId);
+    gameData = JSON.parse(gameData);
+    if (gameData[appId].success)
+    {
+        gameInfo =
+        {
+            "appId": appId,
+            "name": gameData[appId].data.name,
+            "description": gameData[appId].data.short_description,
+        };
+        appInfo[appId] = gameInfo;
+    }
+
+    return appInfo;
+}
+
 function backupProfile()
 {
     // Retrieve profile from API
     var userId = getUserId();
-    const profileUrl = apiUrl + "ISteamUser/GetPlayerSummaries/v0002/?key=" +
+    const profileUrl = apiUrl + "/ISteamUser/GetPlayerSummaries/v0002/?key=" +
         config.apiKey + "&steamids=" + userId;
 
     var outputData = getData(profileUrl);
@@ -41,30 +82,21 @@ function backupWishlist()
 {
     // Retrieve wishlist data
     var userId = getUserId();
-    const wishlistUrl = storeUrl + "/wishlist/profiles/" +
-        userId + "/wishlistdata/?p=";
+    const wishlistUrl = apiUrl + "/IWishlistService/GetWishlist/v0001/?steamid=" + userId;
 
-    // Retrieve pages until no data returned
-    var outputData = {};
-    var p = 0;
-    do
-    {
-        var data = getData(wishlistUrl + p);
-        data = JSON.parse(data);
-        outputData = {
-            ...outputData,
-            ...data
-        };
-        p++;
-    } while (data.length < 1);
+    // Retrieve wishlist
+    var data = getData(wishlistUrl);
+    data = JSON.parse(data);
 
-    // Remove some fields we don't care about
-    for (const key in outputData)
+    // Retrieve and add games names to wishlist
+    var outputData = data.response.items.map(item =>
     {
-        delete outputData[key].screenshots;
-        delete outputData[key].subs;
-        delete outputData[key].platform_icons;
-    };
+        var appInfo = getAppInfo(item.appid);
+        return {
+            "name": appInfo.name,
+            ...item
+        }
+    });
 
     // Save as a json file in the indicated Google Drive folder
     common.updateOrCreateFile(config.backupDir, "wishlist.json",
@@ -75,12 +107,10 @@ function backupGames()
 {
     var userId = getUserId();
     const parameters = "key=" + config.apiKey + "&steamid=" + userId;
-    const ownedGamesUrl = apiUrl + "IPlayerService/GetOwnedGames/v0001/?format=json&" +
+    const ownedGamesUrl = apiUrl + "/IPlayerService/GetOwnedGames/v0001/?format=json&" +
         parameters;
-    const appInfoUrl = storeUrl + "api/appdetails/?appids=";
-    const achievementUrl = apiUrl + "ISteamUserStats/GetPlayerAchievements/v1/?" +
+    const achievementUrl = apiUrl + "/ISteamUserStats/GetPlayerAchievements/v1/?" +
         parameters + "&appid=";
-    const gameNamesUrl = apiUrl + "ISteamApps/GetAppList/v2/";
 
     // Retrieve drive folder to save game data in.
     var folder = common.findOrCreateFolder(config.backupDir, "games");
@@ -98,11 +128,6 @@ function backupGames()
     // Convert returned data to map for later use
     var appIds = data.response.games.map(x => x.appid);
     var playtimeData = new Map(data.response.games.map(x => [x.appid, x]));
-
-    // Retrieve names of all games
-    data = getData(gameNamesUrl);
-    data = JSON.parse(data);
-    var gameNames = new Map(data.applist.apps.map(x => [x.appid, x]));
 
     // Retrieve data for all games
     for (const appId of appIds)
@@ -130,29 +155,7 @@ function backupGames()
         }
 
         // // Retrieve basic info about this game
-        var gameInfo = {};
-        if (gameNames.has(appId))
-        {
-            gameInfo =
-            {
-                "name": gameNames.get(appId).name,
-            };
-        }
-        // Get name from store, if not in all games list
-        else
-        {
-            // Retrieve basic info about this game
-            var gameData = getData(appInfoUrl + appId);
-            gameData = JSON.parse(gameData);
-            if (gameData[appId].success)
-            {
-                gameInfo =
-                {
-                    "name": gameData[appId].data.name,
-                    "description": gameData[appId].data.short_description,
-                };
-            }
-        }
+        var gameInfo = getAppInfo(appId);
 
         // Clean up playtime data
         var thisPlaytimeData = { ...playtimeData.get(appId) };
