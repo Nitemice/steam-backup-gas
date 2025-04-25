@@ -1,5 +1,5 @@
 // Common GAS Functions
-// v2.4.5 - 2024-12-11
+// v2.4.7 - 2025-03-31
 
 var common = {
 
@@ -32,7 +32,7 @@ var common = {
         else
         {
             // Create a new folder
-            Logger.log("Created new folder: " + foldername);
+            Logger.log(`Created new folder: ${foldername}`);
             return backupFolder.createFolder(foldername);
         }
     },
@@ -46,7 +46,7 @@ var common = {
         if (files.hasNext())
         {
             files.next().setTrashed(true);
-            Logger.log("Deleted file: " + filename);
+            Logger.log(`Deleted file: ${filename}`);
         }
     },
 
@@ -63,7 +63,7 @@ var common = {
         else
         {
             // Create a new empty file
-            Logger.log("Created file: " + filename);
+            Logger.log(`Created file: ${filename}`);
             return folder.createFile(filename, newContent);
         }
     },
@@ -78,7 +78,7 @@ var common = {
         {
             // Set the file contents
             file.setContent(content);
-            Logger.log("Updated file: " + filename);
+            Logger.log(`Updated file: ${filename}`);
         }
         return file;
     },
@@ -94,7 +94,7 @@ var common = {
 
         // Set the file contents
         file.setContent(content);
-        Logger.log("Updated file: " + filename);
+        Logger.log(`Updated file: ${filename}`);
 
         return file;
     },
@@ -109,7 +109,7 @@ var common = {
         var folder = DriveApp.getFolderById(parentDir);
         var newFile = folder.createFile(content);
         newFile.setName(filename);
-        Logger.log("Updated file: " + filename);
+        Logger.log(`Updated file: ${filename}`);
         return newFile;
     },
 
@@ -155,13 +155,38 @@ var common = {
                 obj = obj[chunk];
             }
 
-            if (ignoreNulls) {
+            if (ignoreNulls)
+            {
                 obj = obj.filter((value) => value != null)
             }
             outArray = outArray.concat(obj);
         }
 
         return outArray;
+    },
+
+    // Collate objects at given path, from array of objects
+    collateValues: function(path, objects, ignoreNulls = false)
+    {
+        var outArray = new Set();
+        var chunks = path.split('.');
+
+        // Iterate over each object
+        for (var obj of objects)
+        {
+            for (const chunk of chunks)
+            {
+                obj = obj[chunk];
+            }
+
+            if (ignoreNulls)
+            {
+                obj = obj.filter((value) => value != null)
+            }
+            outArray = outArray.add(obj);
+        }
+
+        return [...outArray];
     },
 
     // Covert an array into a map, which can be used for tallying
@@ -175,7 +200,7 @@ var common = {
         return output;
     },
 
-    // Parse UNIX Epoch time, into 
+    // Parse UNIX Epoch time, into ISO datestamp
     epochToIso: function(seconds)
     {
         var date = new Date(0);
