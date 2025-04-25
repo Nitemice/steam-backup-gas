@@ -34,8 +34,7 @@ function getAppInfo(appId)
         appInfo = new Map(data.applist.apps.map(x =>
             [x.appid,
             {
-                ...x,
-                "description": ""
+                ...x
             }]
         ));
     }
@@ -53,7 +52,6 @@ function getAppInfo(appId)
     {
         const gameInfo =
         {
-            "appId": appId,
             "name": gameData[appId].data.name,
             "description": gameData[appId].data.short_description,
         };
@@ -74,8 +72,8 @@ function backupProfile()
     outputData = JSON.parse(outputData);
 
     // Save as a json file in the indicated Google Drive folder
-    common.updateOrCreateFile(config.backupDir, config.username + ".json",
-        JSON.stringify(outputData.response, null, 4));
+    common.updateOrCreateJsonFile(config.backupDir, config.username + ".json",
+        outputData.response);
 }
 
 function backupWishlist()
@@ -99,8 +97,8 @@ function backupWishlist()
     });
 
     // Save as a json file in the indicated Google Drive folder
-    common.updateOrCreateFile(config.backupDir, "wishlist.json",
-        JSON.stringify(outputData, null, 4));
+    common.updateOrCreateJsonFile(config.backupDir, "wishlist.json",
+        outputData);
 }
 
 function backupGames()
@@ -117,8 +115,9 @@ function backupGames()
     const backupFolder = folder.getId();
 
     // Retrieve a meta list of games for service purposes
-    const metaListFile = common.findOrCreateFile(backupFolder, "meta.list.json", "{}");
-    let metaList = common.grabJson(metaListFile.getId());
+    const metaListFile =
+        common.findOrCreateFile(backupFolder, "meta.list.json", "{}");
+    let metaList = common.getJsonFileContent(metaListFile);
     let killList = { ...metaList };
 
     // Retrieve list of all owned games, with playtimes
@@ -135,7 +134,8 @@ function backupGames()
         // If the last played date is the same as last time,
         // then we don't need to update the game's data file
         if (metaList[appId] &&
-            metaList[appId].last_played == playtimeData.get(appId).rtime_last_played)
+            metaList[appId].last_played ==
+            playtimeData.get(appId).rtime_last_played)
         {
             delete killList[appId];
             continue;
@@ -175,8 +175,8 @@ function backupGames()
         }
 
         // Save as a json file in the indicated Google Drive folder
-        common.updateOrCreateFile(backupFolder, appId + ".json",
-            JSON.stringify(outputData, null, 4));
+        common.updateOrCreateJsonFile(backupFolder, appId + ".json",
+            outputData);
 
         // Update meta list with new info
         metaList[appId] = {
