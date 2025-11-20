@@ -22,23 +22,9 @@ function getUserId()
     return data.response.steamid;
 }
 
-let appInfo;
+let appInfo = new Map();
 function getAppInfo(appId)
 {
-    if (typeof appInfo == 'undefined')
-    {
-        // Retrieve names of all games
-        const gameNamesUrl = apiUrl + "/ISteamApps/GetAppList/v2/";
-        let data = getData(gameNamesUrl);
-        data = JSON.parse(data);
-        appInfo = new Map(data.applist.apps.map(x =>
-            [x.appid,
-            {
-                ...x
-            }]
-        ));
-    }
-
     if (appInfo.has(appId))
     {
         return appInfo.get(appId);
@@ -56,7 +42,24 @@ function getAppInfo(appId)
             "description": gameData[appId].data.short_description,
         };
         appInfo.set(appId, gameInfo);
+
+        return appInfo.get(appId);
     }
+
+    // Fallback to retrieve game name only
+    const gameNamesUrl = apiUrl + "/IStoreService/GetAppList/v1/?key=" + config.apiKey + 
+        "&include_games=true&include_dlc=true&include_software=true&include_videos=true&include_hardware=true&" +
+        "max_results=3&last_appid=";
+
+    let data = getData(gameNamesUrl + (appId - 1));
+    data = JSON.parse(data);
+    data = new Map(data.response.apps.map(x =>
+        [x.appid,
+        {
+            ...x
+        }]
+    ));
+    appInfo.set(appId, data.get(appId));
 
     return appInfo.get(appId);
 }
@@ -67,13 +70,30 @@ function backupProfile()
     const userId = getUserId();
     const profileUrl = apiUrl + "/ISteamUser/GetPlayerSummaries/v0002/?key=" +
         config.apiKey + "&steamids=" + userId;
+    const playerLevelUrl = apiUrl + "/IPlayerService/GetSteamLevel/v1/?key=" +
+        config.apiKey + "&steamid=" + userId;
+    const commBadgeUrl = apiUrl + "/IPlayerService/GetCommunityBadgeProgress/v1/?key=" +
+        config.apiKey + "&steamid=" + userId;
 
     let outputData = getData(profileUrl);
     outputData = JSON.parse(outputData);
+    let profile = outputData.response.players[0];
+
+    let levelData = getData(playerLevelUrl);
+    levelData = JSON.parse(levelData);
+
+    let badgeData = getData(commBadgeUrl);
+    badgeData = JSON.parse(badgeData);
+
+    profile = {
+        ...profile,
+        "player_level": levelData.response.player_level,
+        "quests": badgeData.response.quests
+    };
 
     // Save as a json file in the indicated Google Drive folder
     common.updateOrCreateJsonFile(config.backupDir, config.username + ".json",
-        outputData.response);
+        profile);
 }
 
 function backupWishlist()
@@ -91,7 +111,7 @@ function backupWishlist()
     {
         const gameInfo = getAppInfo(item.appid);
         return {
-            "name": gameInfo.name,
+            ...gameInfo,
             ...item
         }
     });
@@ -105,7 +125,8 @@ function backupGames()
 {
     const userId = getUserId();
     const parameters = "key=" + config.apiKey + "&steamid=" + userId;
-    const ownedGamesUrl = apiUrl + "/IPlayerService/GetOwnedGames/v0001/?format=json&" +
+    const ownedGamesUrl = apiUrl + "/IPlayerService/GetOwnedGames/v0001/?" + 
+        "format=json&include_appinfo=true&include_played_free_games=true&include_free_sub=true1&" +
         parameters;
     const achievementUrl = apiUrl + "/ISteamUserStats/GetPlayerAchievements/v1/?" +
         parameters + "&appid=";
